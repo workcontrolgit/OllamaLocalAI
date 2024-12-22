@@ -10,18 +10,20 @@ namespace OllamaLocalAI.Controllers
     {
         private readonly IChatClient _chatClient;
         private readonly ILogger<ChatController> _logger;
+        private readonly IConfiguration _configuration;
 
-        public ChatController(IChatClient chatClient, ILogger<ChatController> logger)
+        public ChatController(IChatClient chatClient, ILogger<ChatController> logger, IConfiguration configuration)
         {
             _chatClient = chatClient;
             _logger = logger;
+            _configuration = configuration;
         }
 
         [HttpPost]
         public async Task<IActionResult> Chat(ChatPrompt chatPrompt)
         {
             // Ground the initial chat messages
-            var messages = GroundMessages(chatPrompt);
+            var messages = GroundPrompt(chatPrompt);
             try
             {
                 // Get the response from the chat client
@@ -41,14 +43,14 @@ namespace OllamaLocalAI.Controllers
         public async Task<IActionResult> ChatHistory(ChatPrompt chatPrompt)
         {
             // Ground the initial chat messages
-            var messages = GroundMessages(chatPrompt);
+            var messages = GroundPrompt(chatPrompt);
             try
             {
                 // Get the response from the chat client
                 var response = await _chatClient.CompleteAsync(messages);
 
                 // Add the assistant's response to the chat history
-                messages.Add(new ChatMessage(ChatRole.Assistant, response.Message.ToString()));
+                messages.Add(new ChatMessage(ChatRole.Assistant, response.Message.Contents));
 
                 // Return the full chat history
                 return Ok(messages.Select(m => new
@@ -64,21 +66,16 @@ namespace OllamaLocalAI.Controllers
             }
         }
 
-        private List<ChatMessage> GroundMessages(ChatPrompt chatPrompt)
+        private List<ChatMessage> GroundPrompt(ChatPrompt chatPrompt)
         {
+            // Load the configuration
+            var systemMessage = _configuration["ChatSettings:SystemMessage"];
+            var assistantMessage = _configuration["ChatSettings:AssistantMessage"];
+
             return new List<ChatMessage>
     {
-        new ChatMessage(ChatRole.System, """
-            Hi there! I’m your AI assistant for PickleIQ, your go-to online training program for all things Pickleball! 🏓✨
-            I’m here to help you with questions about Pickleball skills, strategies, training tips, and the exciting resources available on the PickleIQ website.
-
-            Whether you're a beginner or a seasoned player, PickleIQ is packed with tools, tutorials, and insights to help you elevate your game.
-
-            I focus solely on Pickleball, so if you ask about something unrelated, I’ll kindly redirect you to Pickleball topics. Got a question about your game, training, or how PickleIQ can help you improve? Let’s dive in!
-            """),
-        new ChatMessage(ChatRole.Assistant, """
-            Hi! I'm the PickleIQ Coach. How can I help?
-            """),
+        new ChatMessage(ChatRole.System, systemMessage ?? "Default system message."),
+        new ChatMessage(ChatRole.Assistant, assistantMessage ?? "Default assistant message."),
         new ChatMessage(ChatRole.User, chatPrompt.Message)
     };
         }
